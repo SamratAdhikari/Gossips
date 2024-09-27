@@ -4,29 +4,34 @@ import genTokenAndSetCookie from "../utils/gen.token.js";
 
 export const signup = async (req, res) => {
     try {
-        // extract data from req.body
+        // Extract data from req.body
         const { fullName, username, password, confirmPassword, gender } =
             req.body;
 
-        // check password
-        if (password != confirmPassword) {
-            return res.status(400).send({ message: "Passwords don't match" });
+        // Check if passwords match
+        if (password !== confirmPassword) {
+            return res
+                .status(400)
+                .json({ success: false, message: "Passwords don't match" });
         }
 
-        // check if username name is already taken
-        const user = await User.findOne({ username });
-        if (user) {
-            return res.status(400).send({ message: "Username already exists" });
+        // Check if the username is already taken
+        const existingUser = await User.findOne({ username });
+        if (existingUser) {
+            return res
+                .status(400)
+                .json({ success: false, message: "Username already exists" });
         }
 
-        // hash password
+        // Hash the password
         const salt = await bcrypt.genSalt(10);
         const hashedPswd = await bcrypt.hash(password, salt);
 
-        // profile pic
+        // Generate profile picture URLs
         const boyProfilePic = `https://avatar.iran.liara.run/public/boy?username=${username}`;
         const girlProfilePic = `https://avatar.iran.liara.run/public/girl?username=${username}`;
 
+        // Create new user
         const newUser = new User({
             fullName,
             username,
@@ -36,23 +41,25 @@ export const signup = async (req, res) => {
         });
 
         if (!newUser) {
-            return res.status(400).send({ message: "Invalid user data" });
+            return res
+                .status(400)
+                .json({ success: false, message: "Invalid user data" });
         }
 
-        // JWT token
+        // Generate token and set it in cookies
         genTokenAndSetCookie(newUser._id, res);
 
+        // Save the new user in the database
         await newUser.save();
 
-        // Send the response with _id included
-        return res.status(200).send({
+        // Return success response with user details
+        return res.status(200).json({
+            success: true,
             message: "Signup successful",
-            userDetails: { _id: newUser._id, ...newUser._doc }, // Use _doc to spread the actual document
+            userDetails: { _id: newUser._id, ...newUser._doc }, // Use _doc to get document fields
         });
-
-        // error
     } catch (error) {
-        return res.status(400).send({ message: error.message });
+        return res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -61,29 +68,34 @@ export const login = async (req, res) => {
         const { username, password } = req.body;
 
         // Find user by username
-        const isUser = await User.findOne({ username });
+        const user = await User.findOne({ username });
 
         // Compare the provided password with the stored one (if user exists)
-        const isPassword = await bcrypt.compare(
-            password,
-            isUser?.password || ""
-        );
+        const isPassword = await bcrypt.compare(password, user?.password || "");
 
-        // If user or password is invalid, send error and stop execution
-        if (!isUser || !isPassword) {
-            return res
-                .status(404)
-                .send({ message: "Invalid username or password!" });
+        // If user or password is invalid, send error response
+        if (!user || !isPassword) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid username or password!",
+            });
         }
 
-        // If user and password are valid, generate token and set cookie
-        genTokenAndSetCookie(isUser._id, res);
+        // If valid, generate token and set cookie
+        genTokenAndSetCookie(user._id, res);
 
         // Send success response
-        return res.status(200).send({ message: "Login successful!", isUser });
+        return res.status(200).json({
+            success: true,
+            message: "Login successful!",
+            user,
+        });
     } catch (error) {
-        // Catch any unexpected errors
-        return res.status(400).send({ message: error.message });
+        // Handle unexpected errors
+        return res.status(500).json({
+            success: false,
+            message: error.message,
+        });
     }
 };
 
